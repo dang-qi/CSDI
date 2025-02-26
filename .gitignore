@@ -1,3 +1,4 @@
 ./data/
 .conda/
 save/
+__pycache__/
