@@ -2,3 +2,4 @@
 .conda/
 save/
 __pycache__/
+data/
