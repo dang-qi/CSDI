@@ -6,9 +6,11 @@ import numpy as np
 import torch
 
 class Simulation_Dataset(Dataset):
-    def __init__(self, data_length, scenario="1-1", data_folder=None, subset_split_seed=1, mode="train"):
+    def __init__(self, data_length, scenario="1-1", data_folder=None, subset_split_seed=1, mode="train", missing_strategy="all_but_two_end", missing_ratio=0.1):
         self.data_length = data_length
         self.scenarios = ["1-1","2-1","2-2","2-3","3-1","3-2", "4-1"]
+        self.missing_strategy = missing_strategy
+        self.missing_ratio = missing_ratio
         if data_folder is None:
             self.data_folder = "./data/simulation_data/"
         else:
@@ -21,6 +23,24 @@ class Simulation_Dataset(Dataset):
 
         # Split the data
         self.data = self._split_data(sim_info, data_length)
+        self.subset_split_seed = subset_split_seed
+        self.mode = mode
+        self.data = self.split_data_in_subsets()
+
+
+    def split_data_in_subsets(self):
+        np.random.seed(self.subset_split_seed)
+        np.random.shuffle(self.data)
+        if self.mode == "train":
+            self.data = self.data[:int(0.7*len(self.data))]
+        elif self.mode == "valid":
+            self.data = self.data[int(0.7*len(self.data)):int(0.85*len(self.data))]
+        elif self.mode == "test":
+            self.data = self.data[int(0.85*len(self.data)):]
+        else:
+            raise ValueError(f"Mode {self.mode} is not available. Please choose from ['train','valid','test']")
+        return self.data
+
 
     def _parse_all_data(self, data):
         """
@@ -70,6 +90,7 @@ class Simulation_Dataset(Dataset):
         """
         observed_values = np.array(data[['posX','posY']])
         observed_masks = ~np.isnan(observed_values)
+        observed_values = np.nan_to_num(observed_values)
 
         # set some percentage as missing targets
         masks = observed_masks.reshape(-1).copy()
@@ -88,7 +109,9 @@ class Simulation_Dataset(Dataset):
         gt_masks = masks.reshape(observed_masks.shape)
 
         time_points = np.array(data['time'])
+        time_points = np.nan_to_num(time_points)
         person_ids = np.array(data['personID'])
+        person_ids = np.nan_to_num(person_ids)
         return observed_values, observed_masks, gt_masks, time_points, person_ids
 
     def _split_data(self, sim_info, desired_length):
@@ -114,7 +137,7 @@ class Simulation_Dataset(Dataset):
                 splited_data.append(person_data.iloc[i*desired_length:(i+1)*desired_length])
             # Append and pad the remainder
             if remainder > 0:
-                remaining_data = person_data.iloc[-desired_length:]
+                remaining_data = person_data.iloc[-remainder:]
                 padding = desired_length - remainder
                 padding_data = pd.DataFrame(np.nan, index=np.arange(padding), columns=remaining_data.columns)
                 data_with_padding = pd.concat([remaining_data, padding_data])
@@ -160,10 +183,14 @@ class Simulation_Dataset(Dataset):
         person_info = pd.read_csv(path_info)
         sim_info = pd.read_csv(path_sim)
         return person_info, sim_info
+
+    def _data_preprocessing(self, data):
+        """ Preprocess the data by normalizing the position"""
+        pass
         
     def __getitem__(self, index):
         track = self.data[index]
-        observed_values, observed_masks, gt_masks, time_points, person_ids = self._parse_single_data(track, missing_ratio=0.1, missing_strategy="random")
+        observed_values, observed_masks, gt_masks, time_points, person_ids = self._parse_single_data(track, missing_ratio=self.missing_ratio, missing_strategy=self.missing_strategy)
         s = {
             'observed_data': observed_values,
             'observed_mask': observed_masks,
@@ -172,23 +199,22 @@ class Simulation_Dataset(Dataset):
             #'timepoints': np.arange(self.data_length), # should I use the actual timepoints or the index? 
             'person_ids': person_ids,
         }
-
         return s
     def __len__(self):
         return len(self.data)
 
-def get_dataloader(datatype,device,batch_size=8):
-    dataset = Simulation_Dataset(datatype,mode='train')
+def get_dataloader(data_length, seed, scenario="1-1",batch_size=8):
+    dataset = Simulation_Dataset(data_length, subset_split_seed=seed, scenario=scenario, mode='train')
     train_loader = DataLoader(
         dataset, batch_size=batch_size, shuffle=1)
-    valid_dataset = Simulation_Dataset(datatype,mode='valid')
+    valid_dataset = Simulation_Dataset(data_length,subset_split_seed=seed, scenario=scenario, mode='valid')
     valid_loader = DataLoader(
         valid_dataset, batch_size=batch_size, shuffle=0)
-    test_dataset = Simulation_Dataset(datatype,mode='test')
+    test_dataset = Simulation_Dataset(data_length,subset_split_seed=seed, scenario=scenario, mode='test')
     test_loader = DataLoader(
         test_dataset, batch_size=batch_size, shuffle=0)
 
-    scaler = torch.from_numpy(dataset.std_data).to(device).float()
-    mean_scaler = torch.from_numpy(dataset.mean_data).to(device).float()
+    #scaler = torch.from_numpy(dataset.std_data).to(device).float()
+    #mean_scaler = torch.from_numpy(dataset.mean_data).to(device).float()
 
-    return train_loader, valid_loader, test_loader, scaler, mean_scaler
+    return train_loader, valid_loader, test_loader
