@@ -102,9 +102,11 @@ class Simulation_Dataset(Dataset):
         elif missing_strategy == "middle":
             missing_indices = obs_indices[len(obs_indices)*(1-missing_ratio)//2:len(obs_indices)*(1+missing_ratio)//2]
         elif missing_strategy == "all_but_two_end":
-            missing_indices = obs_indices[1:-1]
+            missing_indices = obs_indices[2:-2] # there are x,y in the two end
         elif missing_strategy == "end":
-            missing_indices = obs_indices[len(obs_indices)*(1-missing_ratio):]
+            missing_indices = obs_indices[len(obs_indices)*(1-missing_ratio)//2*2:] # keep the index to a even number
+        else:
+            raise ValueError(f"Missing strategy {missing_strategy} is not available. Please choose from ['random','middle','all_but_two_end','end']")
         masks[missing_indices] = False
         gt_masks = masks.reshape(observed_masks.shape)
 
