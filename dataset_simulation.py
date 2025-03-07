@@ -197,8 +197,8 @@ class Simulation_Dataset(Dataset):
             'observed_data': observed_values,
             'observed_mask': observed_masks,
             'gt_mask': gt_masks,
-            'timepoints': time_points, # should I use the actual timepoints or the index? 
-            #'timepoints': np.arange(self.data_length), # should I use the actual timepoints or the index? 
+            #'timepoints': time_points, # should I use the actual timepoints or the index? 
+            'timepoints': np.arange(self.data_length), # should I use the actual timepoints or the index? 
             'person_ids': person_ids,
         }
         return s
